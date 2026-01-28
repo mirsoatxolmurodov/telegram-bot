@@ -1,16 +1,16 @@
+import os
 import telebot
 from telebot import types
 import sqlite3
 import csv
-import time
 
 
 # ================== SOZLAMALAR ==================
-TOKEN = "8205914721:AAG9pQGeX4_EGaoUuJXlma7IiUTxDsK6izM"
-ADMIN_ID = 5390578467          # admin user_id
-CHANNEL_USERNAME = "@mirsoat_club"
-YOUTUBE_LINK = "https://youtube.com/"
-ADMIN_USERNAME = "https://t.me/mirsoat_xolmurodov"
+TOKEN = os.getenv("BOT_TOKEN")
+ADMIN_ID = int(os.getenv("ADMIN_ID"))
+CHANNEL_USERNAME = os.getenv("CHANNEL_USERNAME")
+YOUTUBE_LINK = os.getenv("YOUTUBE_LINK")
+ADMIN_USERNAME = os.getenv("ADMIN_USERNAME")
 
 
 bot = telebot.TeleBot(TOKEN, parse_mode="HTML")
@@ -44,18 +44,14 @@ def is_subscribed(user_id):
         return False
 
 
-
-
 def main_keyboard():
     kb = types.InlineKeyboardMarkup(row_width=2)
     kb.add(
         types.InlineKeyboardButton("🔗 Referal ssilka", callback_data="ref"),
         types.InlineKeyboardButton("📺 YouTube", url=YOUTUBE_LINK),
-        types.InlineKeyboardButton("👨‍💻 Admin", url=f"https://t.me/{ADMIN_USERNAME[1:]}")
+        types.InlineKeyboardButton("👨‍💻 Admin", url=f"https://t.me/{ADMIN_USERNAME}")
     )
     return kb
-
-
 
 
 def admin_keyboard():
@@ -77,11 +73,13 @@ def start(message):
     ref_id = int(args[1]) if len(args) > 1 and args[1].isdigit() else None
 
 
-    # Kanalga majburiy a’zolik
     if uid != ADMIN_ID and not is_subscribed(uid):
         kb = types.InlineKeyboardMarkup()
-        kb.add(types.InlineKeyboardButton("✅ Kanalga a’zo bo‘lish", url=f"https://t.me/{CHANNEL_USERNAME[1:]}"))
-        bot.send_message(uid, "❗ Botdan foydalanish uchun kanalga a’zo bo‘ling.", reply_markup=kb)
+        kb.add(types.InlineKeyboardButton(
+            "✅ Kanalga a’zo bo‘lish",
+            url=f"https://t.me/{CHANNEL_USERNAME.replace('@','')}"
+        ))
+        bot.send_message(uid, "❗ Kanalga a’zo bo‘ling.", reply_markup=kb)
         return
 
 
@@ -94,42 +92,17 @@ def start(message):
     username = message.from_user.username
 
 
-    # Yangi foydalanuvchi
     if not user:
-        sql.execute(
-            "INSERT INTO users (user_id, ref_id, referrals, active, first_name, last_name, username) "
-            "VALUES (?, ?, 0, 1, ?, ?, ?)",
-            (uid, ref_id, first, last, username)
-        )
+        sql.execute("""
+        INSERT INTO users (user_id, ref_id, first_name, last_name, username)
+        VALUES (?, ?, ?, ?, ?)
+        """, (uid, ref_id, first, last, username))
 
 
         if ref_id:
-            # faqat referalni +1 qilamiz
-            sql.execute(
-                "UPDATE users SET referrals = referrals + 1 WHERE user_id=?",
-                (ref_id,)
-            )
-
-
-            # Referal egasiga xabar
+            sql.execute("UPDATE users SET referrals = referrals + 1 WHERE user_id=?", (ref_id,))
             try:
-                bot.send_message(
-                    ref_id,
-                    f"🎉 Siz yangi foydalanuvchi qo‘shdingiz!\n"
-                    f"👤 {first} {last if last else ''}"
-                )
-            except:
-                pass
-
-
-            # Admin xabari
-            try:
-                bot.send_message(
-                    ADMIN_ID,
-                    f"➕ Yangi referal qo‘shildi\n"
-                    f"👤 {first} {last if last else ''}\n"
-                    f"🔗 Kimdan: {ref_id}"
-                )
+                bot.send_message(ref_id, f"🎉 Yangi referal: {first}")
             except:
                 pass
 
@@ -137,7 +110,6 @@ def start(message):
         db.commit()
 
 
-    # Admin panel
     if uid == ADMIN_ID:
         bot.send_message(uid, "👑 Admin panel", reply_markup=admin_keyboard())
     else:
@@ -150,23 +122,14 @@ def callbacks(call):
     uid = call.from_user.id
 
 
-    # ===== FOYDALANUVCHI =====
-    if call.data == "ref" and uid != ADMIN_ID:
+    if call.data == "ref":
         link = f"https://t.me/{bot.get_me().username}?start={uid}"
         sql.execute("SELECT referrals FROM users WHERE user_id=?", (uid,))
-        row = sql.fetchone()
-        count = row[0] if row else 0
-
-
-        bot.answer_callback_query(call.id)
-        bot.send_message(
-            uid,
-            f"🔗 Sizning referal havolangiz:\n{link}\n\n👥 Taklif qilganlar: <b>{count}</b> ta"
-        )
+        count = sql.fetchone()[0]
+        bot.send_message(uid, f"🔗 Havola:\n{link}\n\n👥 {count} ta")
         return
 
 
-    # ===== ADMIN =====
     if uid != ADMIN_ID:
         return
 
@@ -174,32 +137,7 @@ def callbacks(call):
     if call.data == "stats":
         sql.execute("SELECT COUNT(*) FROM users")
         total = sql.fetchone()[0]
-        sql.execute("SELECT COUNT(*) FROM users WHERE referrals>0")
-        refs = sql.fetchone()[0]
-        bot.answer_callback_query(call.id)
-        bot.send_message(
-            uid,
-            f"📊 Statistika\n"
-            f"👥 Jami foydalanuvchilar: {total}\n"
-            f"🔗 Referal qilganlar: {refs}"
-        )
-
-
-    elif call.data == "top":
-        sql.execute("""
-        SELECT first_name, last_name, username, referrals
-        FROM users
-        WHERE active=1
-        ORDER BY referrals DESC
-        LIMIT 10
-        """)
-        rows = sql.fetchall()
-        text = "🏆 <b>TOP 10 REFERALLAR</b>\n\n"
-        for i, r in enumerate(rows, 1):
-            uname = f"@{r[2]}" if r[2] else "yo‘q"
-            text += f"{i}. {r[0]} {r[1] if r[1] else ''} ({uname}) — {r[3]} ta\n"
-        bot.answer_callback_query(call.id)
-        bot.send_message(uid, text)
+        bot.send_message(uid, f"👥 Jami: {total}")
 
 
     elif call.data == "export":
@@ -207,56 +145,11 @@ def callbacks(call):
         rows = sql.fetchall()
         with open("users.csv", "w", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
-            writer.writerow(
-                ["user_id", "ref_id", "referrals", "active", "first_name", "last_name", "username"]
-            )
+            writer.writerow(["user_id","ref_id","referrals","active","first","last","username"])
             writer.writerows(rows)
-        bot.answer_callback_query(call.id)
         bot.send_document(uid, open("users.csv", "rb"))
 
 
-    elif call.data == "check":
-        check_left_users()
-        bot.answer_callback_query(call.id, "Tekshiruv tugadi")
-
-
-# ================== TEKSHIRUV ==================
-def check_left_users():
-    sql.execute("SELECT user_id, ref_id FROM users WHERE active=1")
-    users = sql.fetchall()
-
-
-    for uid, ref in users:
-        if not is_subscribed(uid):
-            # faqat O‘SHA referal hisobdan 1 ta ayiriladi
-            if ref:
-                sql.execute(
-                    "UPDATE users SET referrals = referrals - 1 WHERE user_id=? AND referrals>0",
-                    (ref,)
-                )
-                try:
-                    bot.send_message(
-                        ref,
-                        f"⚠️ Siz taklif qilgan foydalanuvchi ({uid}) kanalni tark etdi.\n"
-                        f"➖ 1 referal olib tashlandi."
-                    )
-                except:
-                    pass
-
-
-            sql.execute("UPDATE users SET active=0 WHERE user_id=?", (uid,))
-            try:
-                bot.send_message(
-                    uid,
-                    "❗ Siz kanalni tark etdingiz. Referalingiz bekor qilindi."
-                )
-            except:
-                pass
-
-
-    db.commit()
-
-
-# ================== START BOT ==================
+# ================== RUN ==================
 print("Bot ishga tushdi...")
 bot.infinity_polling()
