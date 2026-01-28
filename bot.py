@@ -6,11 +6,11 @@ import csv
 
 
 # ================== SOZLAMALAR ==================
-TOKEN = os.getenv("BOT_TOKEN")
-ADMIN_ID = int(os.getenv("ADMIN_ID"))
-CHANNEL_USERNAME = os.getenv("CHANNEL_USERNAME")
+TOKEN = os.getenv("8205914721:AAFkrlLErg2JOxG4z_iFVSipNuMQrcxZ0oU")
+ADMIN_ID = int(os.getenv("5390578467"))
+CHANNEL_USERNAME = os.getenv("mirsoat_club")
 YOUTUBE_LINK = os.getenv("YOUTUBE_LINK")
-ADMIN_USERNAME = os.getenv("ADMIN_USERNAME")
+ADMIN_USERNAME = os.getenv("mirsoat_xolmurodov")
 
 
 bot = telebot.TeleBot(TOKEN, parse_mode="HTML")
@@ -153,3 +153,4 @@ def callbacks(call):
 # ================== RUN ==================
 print("Bot ishga tushdi...")
 bot.infinity_polling()
+
